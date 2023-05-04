@@ -11,16 +11,19 @@
 #include <linux/netfilter.h>		/* for NF_ACCEPT */
 #include <errno.h>
 #include <string>
+#include <fstream>
+#include <vector>
 
 #include <libnetfilter_queue/libnetfilter_queue.h>
 #include "libnet.h"
 
 using namespace std;
 
-string host;
+string filename;
+vector<string> hostList;
 
 void usage() {
-	printf("syntax : netfilter-test <host>\nsample : netfilter-test test.gilgil.net");
+	printf("syntax : 1m-block <site list file>\nsample : 1m-block top-1m.txt");
 }
 
 
@@ -130,12 +133,13 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 		if(ntohs(tcp_hdr->th_sport) == 80 || ntohs(tcp_hdr->th_dport) == 80 ) { //HTTP
 
 		string httpdata = (char*)(pkt + idx);
+		/*
 		if(httpdata.find(host) != string::npos) { // finds host in httpdata
 			printf("%s blocked\n", host.c_str());
 			return nfq_set_verdict(qh, id, NF_DROP, 0, NULL);
 		} else {
 			printf("Passed HTTP packet\n");
-		}
+		}*/
 		} else {
 			printf("Not HTTP! (source port = %d, destination port = %d)\n", ntohs(tcp_hdr->th_sport));
 		}
@@ -159,7 +163,27 @@ int main(int argc, char **argv)
 		return -1;
 	}
 	
-	host = argv[1];
+
+	filename = argv[1];
+	ifstream inputFile(filename);
+	
+	if(inputFile.is_open()) {
+		string line, hostAddr;
+		while(getline(inputFile, line)) {
+			hostAddr = line.substr(line.find(",") + 1);
+			hostList.push_back(hostAddr);
+		}
+	} else {
+		printf("Failed to open %s\n", filename);
+		return -1;
+	}
+
+	printf("%s\n", hostList[23].c_str());
+
+
+
+	
+
 
 	printf("opening library handle\n");
 	h = nfq_open();
@@ -244,4 +268,5 @@ int main(int argc, char **argv)
 	nfq_close(h);
 
 	exit(0);
+	
 }
