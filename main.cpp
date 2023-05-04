@@ -133,13 +133,18 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 		if(ntohs(tcp_hdr->th_sport) == 80 || ntohs(tcp_hdr->th_dport) == 80 ) { //HTTP
 
 		string httpdata = (char*)(pkt + idx);
-		/*
-		if(httpdata.find(host) != string::npos) { // finds host in httpdata
-			printf("%s blocked\n", host.c_str());
-			return nfq_set_verdict(qh, id, NF_DROP, 0, NULL);
+	
+		if(httpdata.find("Host: ") != string::npos) { // finds "Host: "" in httpdata
+			int n = httpdata.find("Host: ");
+			string host = httpdata.substr(n+6);
+			n = host.find("\r\n");
+			host = host.substr(0, n); // parse host			
+			//Check if host is in hostList
+			
+			//return nfq_set_verdict(qh, id, NF_DROP, 0, NULL);
 		} else {
 			printf("Passed HTTP packet\n");
-		}*/
+		}
 		} else {
 			printf("Not HTTP! (source port = %d, destination port = %d)\n", ntohs(tcp_hdr->th_sport));
 		}
