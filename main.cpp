@@ -10,9 +10,10 @@
 #include <linux/types.h>
 #include <linux/netfilter.h>		/* for NF_ACCEPT */
 #include <errno.h>
+
 #include <string>
-#include <fstream>
-#include <vector>
+#include <cstring> // memset
+#include <fstream> // ifstream
 
 #include <libnetfilter_queue/libnetfilter_queue.h>
 #include "libnet.h"
@@ -20,12 +21,96 @@
 using namespace std;
 
 string filename;
-vector<string> hostList;
 
 void usage() {
 	printf("syntax : 1m-block <site list file>\nsample : 1m-block top-1m.txt");
 }
 
+int getidx(char ch) {
+	// trie구조를 만들 때 사용
+	// domain addr는 .,-,알파벳, 0-9 만 가능
+	// Host addr host addr는 case-sensitive 하지 않으므로, 대소문자를 같은 idx로 처리
+	// 0~9 : '0' ~ '9'
+	// 10 ~ 35 : 'a' ~ 'z'
+	// 36 : '.'
+	// 37 : '-'
+	if ( '0' <= ch && ch <= '9')
+		return ch - '0';
+	else if ('A' <= ch && ch <= 'Z')
+		return ch - 'A';
+	else if ('a' <= ch && ch <= 'z')
+		return ch - 'a';
+	else if (ch == '.')
+		return 36;
+	else if (ch == '-')
+		return 37;
+	else  // Unexpected input
+		return -1;
+}
+
+class TrieNode {
+public:
+    bool isEnd;
+    TrieNode* children[38];
+
+    TrieNode() {
+        isEnd = false;
+        memset(children, 0, sizeof(children)); 
+    }
+
+    ~TrieNode() {
+        for (int i = 0; i < 38; i++) {
+            delete children[i];
+        }
+    }
+};
+
+class Trie {
+public:
+    Trie() {
+        root = new TrieNode();
+    }
+
+    ~Trie() {
+        delete root;
+    }
+
+    void insert(const string& word) {
+        TrieNode* current = root;
+        for (char c : word) {
+            int idx = getidx(c);
+            if (idx == -1) {
+                return ;
+            }
+            
+            if (current->children[idx] == 0) {
+                current->children[idx] = new TrieNode();
+            }
+            current = current->children[idx];
+        }
+        current->isEnd = true;
+    }
+
+    bool search(const string& word) {
+        TrieNode* current = root;
+        for (char c : word) {
+            int idx= getidx (c);
+            if (idx == -1 ){
+                return false;
+            }
+            if (current->children[idx] == 0) {
+                return false;
+            }
+            current = current->children[idx];
+        }
+        return current->isEnd;
+    }
+
+private:
+    TrieNode* root;
+};
+
+Trie trie;
 
 /*
 void dump(unsigned char* buf, int size) {
@@ -139,7 +224,8 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 			string host = httpdata.substr(n+6);
 			n = host.find("\r\n");
 			host = host.substr(0, n); // parse host			
-			//Check if host is in hostList
+			
+			//Todo: Check if host is in hostList
 			
 			//return nfq_set_verdict(qh, id, NF_DROP, 0, NULL);
 		} else {
@@ -173,22 +259,30 @@ int main(int argc, char **argv)
 	ifstream inputFile(filename);
 	
 	if(inputFile.is_open()) {
+		printf("Creating block host list DB (trie) from %s...\n", filename.c_str());
 		string line, hostAddr;
 		while(getline(inputFile, line)) {
 			hostAddr = line.substr(line.find(",") + 1);
-			hostList.push_back(hostAddr);
+			trie.insert(hostAddr);
 		}
+		printf("Done!\n");
 	} else {
 		printf("Failed to open %s\n", filename);
 		return -1;
 	}
 
-	printf("%s\n", hostList[23].c_str());
+	// test trie
+	if(trie.search("gitlab.com")){
+		printf("gitlab.com is in the list\n");
+	} else {
+		printf("gitlab.com is not in the list\n");
+	}
 
-
-
-	
-
+	if(trie.search("test.gilgil.net")) {
+		printf("test.gilgil.net is in the list\n");
+	} else {
+		printf("test.gilgil.net is not in the list\n");
+	}
 
 	printf("opening library handle\n");
 	h = nfq_open();
