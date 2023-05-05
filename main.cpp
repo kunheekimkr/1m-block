@@ -217,27 +217,26 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 
 		if(ntohs(tcp_hdr->th_sport) == 80 || ntohs(tcp_hdr->th_dport) == 80 ) { //HTTP
 
-		string httpdata = (char*)(pkt + idx);
+			string httpdata = (char*)(pkt + idx);
 	
-		if(httpdata.find("Host: ") != string::npos) { // finds "Host: "" in httpdata
-			int n = httpdata.find("Host: ");
-			string host = httpdata.substr(n+6);
-			n = host.find("\r\n");
-			host = host.substr(0, n); // parse host			
-			
-			//Todo: Check if host is in hostList
-			
-			//return nfq_set_verdict(qh, id, NF_DROP, 0, NULL);
-		} else {
-			printf("Passed HTTP packet\n");
-		}
-		} else {
-			printf("Not HTTP! (source port = %d, destination port = %d)\n", ntohs(tcp_hdr->th_sport));
-		}
+			if(httpdata.find("Host: ") != string::npos) { // finds "Host: "" in httpdata
+				int n = httpdata.find("Host: ");
+				string host = httpdata.substr(n+6);
+				n = host.find("\r\n");
+				host = host.substr(0, n); // parse host			
 
-	} else  {
-		printf("Not TCP! (ip_p = %d)\n", ip_hdr->ip_p);
-	}
+				if(trie.search(host)) {
+					printf("Blocked HTTP packet to host : %s\n", host.c_str());
+					return nfq_set_verdict(qh, id, NF_DROP, 0, NULL);
+				} 
+				else {
+					printf("Passed HTTP packet to host : %s\n", host.c_str());
+				}
+			} 
+		} 
+	} 
+
+	// implicitly pass all other packets! (To much prints!)
 	return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
 }
 
@@ -269,19 +268,6 @@ int main(int argc, char **argv)
 	} else {
 		printf("Failed to open %s\n", filename);
 		return -1;
-	}
-
-	// test trie
-	if(trie.search("gitlab.com")){
-		printf("gitlab.com is in the list\n");
-	} else {
-		printf("gitlab.com is not in the list\n");
-	}
-
-	if(trie.search("test.gilgil.net")) {
-		printf("test.gilgil.net is in the list\n");
-	} else {
-		printf("test.gilgil.net is not in the list\n");
 	}
 
 	printf("opening library handle\n");
